@@ -3,11 +3,13 @@ from pyfsutils import get_files_exts
 import os
 import json
 
+
 class Playlist(object):
     @classmethod
-    def from_json(cls, obj: dict):
-        return cls(obj["searchPaths"], obj.get("defaultSearchExt", [".mp3"]))
-    
+    def from_json(cls, obj: dict, autoload: bool=True):
+        r = cls(obj["searchPaths"], obj.get("defaultSearchExt", [".mp3"]))
+        r.find_songs()
+        return r
     
     def __init__(self, search_paths: Optional[List[str]]=None, search_ext: Optional[Union[List[str], Set[str]]]=None):
         self.search_ext = [".mp3"] if search_ext is None else search_ext
@@ -30,8 +32,4 @@ class Playlist(object):
 def load_playlists(f_name: str) -> List[Playlist]:
     with open(f_name, "r") as fl:
         playlists = json.load(fl)
-    playlists1: List[Playlist] = [None] * len(playlists)
-    for i in range(len(playlists)):
-        playlists1[i] = Playlist.from_json(playlists[i])
-        playlists1[i].find_songs()
-    return playlists1
+    return [Playlist.from_json(data) for data in playlists]
