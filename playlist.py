@@ -6,13 +6,15 @@ import json
 
 class Playlist(object):
     @classmethod
-    def from_json(cls, obj: dict, auto_load: bool=True):
+    def from_json(cls, obj: dict, auto_load: bool = True):
         r = cls(obj["searchPaths"], obj.get("defaultSearchExt", [".mp3"]))
         if auto_load:
             r.find_songs()
         return r
     
-    def __init__(self, search_paths: Optional[List[str]]=None, search_ext: Optional[Union[List[str], Set[str]]]=None):
+    def __init__(self,
+                 search_paths: Optional[List[str]] = None,
+                 search_ext: Optional[Union[List[str], Set[str]]] = None):
         self.search_ext = [".mp3"] if search_ext is None else search_ext
         self.search_paths = [] if search_paths is None else search_paths
         songs: Optional[List[str]] = None

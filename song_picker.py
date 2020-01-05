@@ -1,6 +1,6 @@
 from playlist import Playlist
 from random import Random
-from typing import List, Optional
+from typing import List
 
 
 class SongPicker(object):

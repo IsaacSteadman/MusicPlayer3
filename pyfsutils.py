@@ -1,8 +1,8 @@
-from typing import List, Optional, Set, Union
+from typing import List, Set, Union
 import os
 
 
-def get_files_exts(d: str, exts: Union[List[str], Set[str]], out_full: bool=True) -> List[str]:
+def get_files_exts(d: str, exts: Union[List[str], Set[str]], out_full: bool = True) -> List[str]:
     ls = os.listdir
     isf = os.path.isfile
     isd = os.path.isdir
@@ -14,7 +14,7 @@ def get_files_exts(d: str, exts: Union[List[str], Set[str]], out_full: bool=True
         nxt = []
         for d1 in cur:
             full_par = d + d1
-            for f in os.listdir(full_par):
+            for f in ls(full_par):
                 full = full_par + f
                 if isf(full):
                     base, ext = spe(f)

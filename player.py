@@ -48,13 +48,14 @@ def seek(pos: float = 0, rel: bool = True):
 
 def play_song():
     global playing, cur_off
+    # noinspection PyBroadException
     try:
         music.load(cur_p.cur_song)
         music.play()
         cur_off = 0
         print("Playing:", cur_p.cur_song)
         playing = True
-    except:
+    except Exception:
         pygame.event.post(pygame.event.Event(pygame.USEREVENT, {}))
 
 
@@ -88,7 +89,7 @@ def mainloop():
             elif evt.key == pygame.K_RIGHT:
                 seek(10000 if evt.mod & pygame.KMOD_SHIFT else 5000)
             elif evt.key == pygame.K_LEFT:
-                seek(-1000 *(10 if evt.mod & pygame.KMOD_SHIFT else 5))
+                seek(-1000 * (10 if evt.mod & pygame.KMOD_SHIFT else 5))
             elif evt.key == pygame.K_r:
                 music.rewind()
                 cur_off = 0
