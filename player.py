@@ -3,6 +3,8 @@ import pygame
 import os
 import random
 from playlist import load_playlists
+from song_picker import SongPicker
+from pygame.mixer import music
 import json
 
 
@@ -19,62 +21,88 @@ playlists = load_playlists(os.path.join(settings["musicDir"], "playlists.json"))
 os.chdir(prev)
 
 
-cur_p = playlists[0]
+cur_p = SongPicker(playlists[0], 12)
 rng = random.SystemRandom()
-print('len(cur_p.songs)=',len(cur_p.songs)) 
-cur_song_idx = rng.randint(0, len(cur_p.songs) - 1)
+cur_p.pick(rng)
+playing = False
+
+cur_off = 0
 
 
-def back_get(obj, val):
-    for k in dir(obj):
-        if getattr(obj, k) == val:
-            return k
-    return "UNKNOWN???"
+def seek(pos: float = 0, rel: bool = True):
+    global cur_off
+    if rel:
+        if pos == 0:
+            return
+        elif pos > 0:
+            cur_off += music.get_pos() + pos
+            music.play(start=pos/1000)
+            return
+        else:
+            pos = max(music.get_pos() + cur_off + pos, 0)
+            print("relative seek backward absolute=", pos)
+    music.rewind()
+    music.play(start=pos/1000)
+    cur_off = pos
 
 
-def playsong(i: int):
-    global cur_song_idx, playing
+def play_song():
+    global playing, cur_off
     try:
-        pygame.mixer.music.load(cur_p.songs[i])
-        pygame.mixer.music.play()
-        print("Playing:", cur_p.songs[i])
+        music.load(cur_p.cur_song)
+        music.play()
+        cur_off = 0
+        print("Playing:", cur_p.cur_song)
         playing = True
-        cur_song_idx = i
     except:
         pygame.event.post(pygame.event.Event(pygame.USEREVENT, {}))
 
 
 def mainloop():
-    global playing, cur_p, rng, cur_song_idx
+    global playing, rng, cur_off
     while True:
         evt = pygame.event.wait()
         if evt.type == pygame.QUIT:
             break
-        elif evt.type == pygame.KEYDOWN and evt.key == pygame.K_SPACE:
-            playing = not playing
-            if playing:
-                pygame.mixer.music.unpause()
-            else:
-                pygame.mixer.music.pause()
-        elif evt.type == pygame.KEYDOWN and evt.key == pygame.K_DOWN:
-            playsong((cur_song_idx + 1) % len(cur_p.songs))
+        elif evt.type == pygame.USEREVENT:
+            print("Next song (REASON: USEREVENT)")
+            cur_p.pick(rng)
+            play_song()
+        elif evt.type == pygame.KEYDOWN:
+            if evt.key == pygame.K_RETURN:
+                print("Next song (REASON: K_RETURN)")
+                cur_p.pick(rng)
+                play_song()
+            elif evt.key == pygame.K_SPACE:
+                playing = not playing
+                if playing:
+                    music.unpause()
+                else:
+                    music.pause()
+            elif evt.key == pygame.K_DOWN:
+                cur_p.pick_manual((cur_p.idx + 1) % cur_p.num_songs)
+                play_song()
+            elif evt.key == pygame.K_UP:
+                cur_p.pick_manual((cur_p.idx - 1) % cur_p.num_songs)
+                play_song()
+            elif evt.key == pygame.K_RIGHT:
+                seek(10000 if evt.mod & pygame.KMOD_SHIFT else 5000)
+            elif evt.key == pygame.K_LEFT:
+                seek(-1000 *(10 if evt.mod & pygame.KMOD_SHIFT else 5))
+            elif evt.key == pygame.K_r:
+                music.rewind()
+                cur_off = 0
         elif evt.type == pygame.KEYDOWN and evt.key == pygame.K_UP:
-            playsong((cur_song_idx - 1) % len(cur_p.songs))
-        elif evt.type == pygame.USEREVENT or (evt.type == pygame.KEYDOWN and evt.key == pygame.K_RETURN):
-            i = rng.randint(0, len(cur_p.songs) - 2)
-            if i >= cur_song_idx:
-                i += 1
-            playsong(i)
+            cur_p.pick_manual((cur_p.idx - 1) % cur_p.num_songs)
+            play_song()
 
 
 if __name__ == "__main__":
     pygame.display.init()
     pygame.display.set_mode((640, 480))
     pygame.mixer.init(frequency=44100)
-    pygame.mixer.music.set_endevent(pygame.USEREVENT)
-    pygame.mixer.music.load(cur_p.songs[cur_song_idx])
-    pygame.mixer.music.play()
-    print("Playing:", cur_p.songs[cur_song_idx])
-    playing = True
+    music.set_endevent(pygame.USEREVENT)
+    cur_p.pick(rng)
+    play_song()
     mainloop()
     pygame.quit()
