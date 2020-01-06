@@ -32,7 +32,7 @@ class SongPicker(object):
         prev = self.chances[self.idx]
         stage = 0
         self.chances[self.idx] = 0
-        diff_total = self.chance_mapper(self, stage) - self.chance_mapper(self, prev)
+        diff_total += self.chance_mapper(self, stage) - self.chance_mapper(self, prev)
         self.total += diff_total
         self.idx = selected_idx
         return self.idx
