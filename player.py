@@ -20,8 +20,18 @@ from mp3meta import Mp3Info
 base_dir = os.path.dirname(__file__)
 
 
-with open(os.path.join(base_dir, "settings.json"), "r") as fl:
-    settings = json.load(fl)
+try:
+    with open(os.path.join(base_dir, "settings.json"), "r") as fl:
+        settings = json.load(fl)
+except FileNotFoundError:
+    settings = {
+        "musicDir": ".",
+        "volume": 128,
+        "max_ban": 12
+    }
+    with open(os.path.join(base_dir, "settings.json"), "w") as fl:
+        json.dump(settings, fl)
+    
 
 
 prev = os.getcwd()
