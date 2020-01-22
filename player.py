@@ -158,6 +158,24 @@ class PlayerApp(App):
             "mod&": pygame.KMOD_SHIFT,
             "mod!&": pygame.KMOD_ALT
         })
+        self.prev_in_hist_btn = PressButton(
+            "Prev Song", self.prev_song_action,
+            (64, 244 + 19 + 35 + 35), self.sub_fnt
+        )
+        self.prev_in_hist_btn.add_glob_capture(pygame.KEYDOWN, {
+            "key": pygame.K_LEFT,
+            "mod!&": pygame.KMOD_SHIFT,
+            "mod&": pygame.KMOD_ALT
+        })
+        self.next_in_hist_btn = PressButton(
+            "Next Song", self.next_song_action,
+            (64, 244 + 19 + 35 + 35 + 35), self.sub_fnt
+        )
+        self.next_in_hist_btn.add_glob_capture(pygame.KEYDOWN, {
+            "key": pygame.K_RIGHT,
+            "mod!&": pygame.KMOD_SHIFT,
+            "mod&": pygame.KMOD_ALT
+        })
         self.ctls = [
             self.loop_btn,
             self.song_btn,
@@ -173,7 +191,9 @@ class PlayerApp(App):
             self.prev_5_sec_btn,
             self.prev_10_sec_btn,
             self.skip_5_sec_btn,
-            self.skip_10_sec_btn
+            self.skip_10_sec_btn,
+            self.prev_in_hist_btn,
+            self.next_in_hist_btn
         ]
         max_ban = self.settings.get("max_ban", 12)
         if not isinstance(max_ban, int):
@@ -187,6 +207,8 @@ class PlayerApp(App):
         self.dct_global_event_func[pygame.USEREVENT + 1] = self.on_tick
         pygame.time.set_timer(pygame.USEREVENT + 1, 1000 // 20)
         self.pick_song()
+        self.song_hist_idx = 0
+        self.song_hist = [self.cur_p.idx]
         self.play_song()
 
     def on_music_done(self, evt):
@@ -195,10 +217,33 @@ class PlayerApp(App):
 
     def next_in_list_action(self, btn, pos):
         self.cur_p.pick_manual((self.cur_p.idx + 1) % self.cur_p.num_songs)
+        self.log_song_hist()
         self.play_song()
 
     def prev_in_list_action(self, btn, pos):
         self.cur_p.pick_manual((self.cur_p.idx - 1) % self.cur_p.num_songs)
+        self.log_song_hist()
+        self.play_song()
+    
+    def log_song_hist(self):
+        self.song_hist_idx += 1
+        self.song_hist[self.song_hist_idx:] = [self.cur_p.idx]
+        print("song_hist", self.song_hist)
+
+    def prev_song_action(self, btn, pos):
+        song_hist_idx = max(0, self.song_hist_idx - 1)
+        if self.song_hist_idx == song_hist_idx:
+            return
+        self.song_hist_idx = song_hist_idx
+        self.cur_p.pick_manual(self.song_hist[song_hist_idx])
+        self.play_song()
+
+    def next_song_action(self, btn, pos):
+        song_hist_idx = min(len(self.song_hist) - 1, self.song_hist_idx + 1)
+        if self.song_hist_idx == song_hist_idx:
+            return
+        self.song_hist_idx = song_hist_idx
+        self.cur_p.pick_manual(self.song_hist[song_hist_idx])
         self.play_song()
 
     def next_song(self):
@@ -210,6 +255,7 @@ class PlayerApp(App):
             self.pick_song()
         elif self.song_btn.cur_state:
             self.cur_p.pick_manual((self.cur_p.idx + 1) % self.cur_p.num_songs)
+        self.log_song_hist()
         self.play_song()
 
     def on_tick(self, evt):
