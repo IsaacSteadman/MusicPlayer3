@@ -226,9 +226,11 @@ class PlayerApp(App):
         self.play_song()
     
     def log_song_hist(self):
+        if self.song_hist[self.song_hist_idx] == self.cur_p.idx:
+            self.song_hist[self.song_hist_idx + 1:] = []
+            return
         self.song_hist_idx += 1
         self.song_hist[self.song_hist_idx:] = [self.cur_p.idx]
-        print("song_hist", self.song_hist)
 
     def prev_song_action(self, btn, pos):
         song_hist_idx = max(0, self.song_hist_idx - 1)
