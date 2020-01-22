@@ -131,28 +131,32 @@ class PlayerApp(App):
         )
         self.prev_5_sec_btn.add_glob_capture(pygame.KEYDOWN, {
             "key": pygame.K_LEFT,
-            "mod!&": pygame.KMOD_SHIFT
+            "mod!&": pygame.KMOD_SHIFT,
+            "mod!&": pygame.KMOD_ALT
         })
         self.prev_10_sec_btn = PressButton(
             "Back 10s", lambda btn, pos: self.seek(-10000), (500, 244 + 19 + 19), self.sub_fnt
         )
         self.prev_10_sec_btn.add_glob_capture(pygame.KEYDOWN, {
             "key": pygame.K_LEFT,
-            "mod&": pygame.KMOD_SHIFT
+            "mod&": pygame.KMOD_SHIFT,
+            "mod!&": pygame.KMOD_ALT
         })
         self.skip_5_sec_btn = PressButton(
             "Skip 5s", lambda btn, pos: self.seek(5000), (400, 244 + 19 + 19 + 19), self.sub_fnt
         )
         self.skip_5_sec_btn.add_glob_capture(pygame.KEYDOWN, {
             "key": pygame.K_RIGHT,
-            "mod!&": pygame.KMOD_SHIFT
+            "mod!&": pygame.KMOD_SHIFT,
+            "mod!&": pygame.KMOD_ALT
         })
         self.skip_10_sec_btn = PressButton(
             "Skip 10s", lambda btn, pos: self.seek(10000), (500, 244 + 19 + 19 + 19), self.sub_fnt
         )
         self.skip_10_sec_btn.add_glob_capture(pygame.KEYDOWN, {
             "key": pygame.K_RIGHT,
-            "mod&": pygame.KMOD_SHIFT
+            "mod&": pygame.KMOD_SHIFT,
+            "mod!&": pygame.KMOD_ALT
         })
         self.ctls = [
             self.loop_btn,
