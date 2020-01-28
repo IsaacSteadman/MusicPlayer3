@@ -15,6 +15,7 @@ from PygGUI2.uix.pressbutton import PressButton
 from PygGUI2.uix.togglebutton import ToggleButton
 from PygGUI2.base.pyg_types import Number, IntPoint, Color
 from mp3meta import Mp3Info
+import find_SDL_Mixer
 
 
 base_dir = os.path.dirname(__file__)
@@ -209,6 +210,7 @@ class PlayerApp(App):
         self.pick_song()
         self.song_hist_idx = 0
         self.song_hist = [self.cur_p.idx]
+        self.SDL_mixer = find_SDL_Mixer.ctypes.CDLL(find_SDL_Mixer.find_sdl_mixer_name())
         self.play_song()
 
     def on_music_done(self, evt):
@@ -294,8 +296,14 @@ class PlayerApp(App):
 
     def play_song(self):
         self.cur_off = 0
-        with open(self.cur_p.cur_song, "rb") as fl:
-            info = Mp3Info(fl)
+        while True:
+            try:
+                with open(self.cur_p.cur_song, "rb") as fl:
+                    info = Mp3Info(fl)
+            except:
+                self.next_song()
+            else:
+                break
         self.cur_song_duration = info.duration
         if info.sample_rate != self.mixer_freq:
             print("This file has a different sample rate reloading mixer subsystem with appropriate sample rate")
@@ -317,6 +325,7 @@ class PlayerApp(App):
         except Exception as exc:
             print(exc)
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, {}))
+        self.SDL_mixer.Mix_SetPostMix(find_SDL_Mixer.cb, 0)
 
     def seek(self, pos: Number = 0, rel: bool = True):
         if rel:
@@ -327,6 +336,7 @@ class PlayerApp(App):
                 music.play(start=pos / 1000)
                 print("relative seek forward by %.15g seconds" % (pos / 1000))
                 self.playing = True
+                self.SDL_mixer.Mix_SetPostMix(find_SDL_Mixer.cb, 0)
                 return
             else:
                 pos = max(music.get_pos() + self.cur_off + pos, 0)
@@ -336,6 +346,7 @@ class PlayerApp(App):
         music.play(start=pos / 1000)
         self.playing = True
         self.cur_off = pos
+        self.SDL_mixer.Mix_SetPostMix(find_SDL_Mixer.cb, 0)
 
     def pick_song(self):
         self.cur_p.pick(self.rng)
