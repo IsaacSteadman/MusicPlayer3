@@ -57,6 +57,7 @@ def find_sdl_mixer_name() -> str:
     return res[0]
 
 Mix_SetPostMix_CB = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_int16), ctypes.c_int)
+Mix_EffectFunc_t = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.POINTER(ctypes.c_int16), ctypes.c_int, ctypes.c_void_p)
 
 import time
 last_time = time.time()
@@ -70,4 +71,12 @@ def callback(udata, stream, length: int):
         total += abs(stream[i])
     print(("Mix_SetPostMix  avg=%.6f\tbitrate=%.9f\tlen=%u" % (total / length, length * 16 / (t - last_time), length)).expandtabs(17))
     last_time = t
+
+
+def callback1(chan: int, stream, length: int, udata):
+    callback(udata, stream, length)
+
+
 cb = Mix_SetPostMix_CB(callback)
+cb1 = Mix_EffectFunc_t(callback1)
+MIX_CHANNEL_POST = -2

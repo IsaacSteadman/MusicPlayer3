@@ -1,0 +1,284 @@
+
+	void ConQueue::get_bytes(ByteArray &into, size_t num_bytes, size_t at) {
+		QBlk *my_last = 0;
+		size_t prev_read = 0;
+		while (true) {
+			last_lock->acquire();
+			//total_bytes -= prev_read;
+			atomic_sub(total_bytes, prev_read);
+			if (get_func != 0 && prev_read > 0)
+			{
+				try {
+					get_func(cb_obj, prev_read);
+				}
+				catch (...) {
+					last_lock->release();
+					throw;
+				}
+			}
+			prev_read = 0;
+			if (num_bytes == 0) break;
+			if (my_last != last) my_last = last;
+			else break;//break while the lock is held to preserve the current synchronized state
+			last_lock->release();
+			while (first != my_last)
+			{
+				QBlk *next = first->next;
+				if (first->data.length() <= num_bytes)
+				{
+					ByteArray tmp((ByteArray &&)first->data);
+					into.write_from_at(tmp, at);
+					size_t cur_read = tmp.length();
+					prev_read += cur_read;
+					num_bytes -= cur_read;
+					at += cur_read;
+					delete first;
+					first = next;
+				}
+				else
+				{
+					into.write_from_at(first->data.sub_array(0, num_bytes), at);
+					first->data.remove_from_start(num_bytes);
+					prev_read += num_bytes;
+					at += num_bytes;
+					num_bytes = 0;
+				}
+				if (num_bytes == 0) break;
+			}
+		}
+		while (num_bytes > 0) {
+			while (!first) last_cond->wait();// If there isn't a next then wait for one
+			last_lock->release();
+			if (first->data.length() <= num_bytes)
+			{
+				prev_read = first->data.length();
+				ByteArray tmp((ByteArray &&)first->data);
+				into.write_from_at(tmp, at);
+				num_bytes -= tmp.length();
+				last_lock->acquire();
+				QBlk *next = first->next;
+				delete first;
+				first = next;
+				if (!first) last = 0;
+			}
+			else
+			{
+				prev_read = num_bytes;
+				into.write_from_at(first->data.sub_array(0, num_bytes), at);
+				first->data.remove_from_start(num_bytes);
+				num_bytes = 0;
+				last_lock->acquire();
+			}
+			at += prev_read;
+			//total_bytes -= prev_read;
+			atomic_sub(total_bytes, prev_read);
+			if (get_func != 0 && prev_read > 0)
+			{
+				try {
+					get_func(cb_obj, prev_read);
+				}
+				catch (...) {
+					last_lock->release();
+					throw;
+				}
+			}
+		}
+		last_lock->release();
+	}
+	size_t ConQueue::try_get_bytes(ByteArray &into, size_t num_bytes, size_t at) {
+		QBlk *my_last = 0;
+		size_t prev_read = 0;
+		while (true) {
+			last_lock->acquire();
+			total_bytes -= prev_read;
+			if (get_func != 0 && prev_read > 0)
+			{
+				try {
+					get_func(cb_obj, prev_read);
+				}
+				catch (...) {
+					last_lock->release();
+					throw;
+				}
+			}
+			prev_read = 0;
+			if (num_bytes == 0) break;
+			if (my_last != last) my_last = last;
+			else break;//break while the lock is held to preserve the current synchronized state
+			last_lock->release();
+			while (first != my_last)
+			{
+				QBlk *next = first->next;
+				if (first->data.length() <= num_bytes)
+				{
+					ByteArray tmp((ByteArray &&)first->data);
+					into.write_from_at(tmp, at);
+					size_t cur_read = tmp.length();
+					prev_read += cur_read;
+					num_bytes -= cur_read;
+					at += cur_read;
+					delete first;
+					first = next;
+				}
+				else
+				{
+					into.write_from_at(first->data.sub_array(0, num_bytes), at);
+					first->data.remove_from_start(num_bytes);
+					prev_read += num_bytes;
+					at += num_bytes;
+					num_bytes = 0;
+				}
+			}
+		}
+		if (!first) prev_read = 0;
+		else if (first->data.length() <= num_bytes)
+		{
+			prev_read = first->data.length();
+			ByteArray tmp((ByteArray &&)first->data);
+			into.write_from_at(tmp, at);
+			num_bytes -= tmp.length();
+			delete first;
+			first = 0;
+			last = 0;
+		}
+		else if (num_bytes)
+		{
+			prev_read = num_bytes;
+			into.write_from_at(first->data.sub_array(0, num_bytes), at);
+			first->data.remove_from_start(num_bytes);
+			num_bytes = 0;
+		}
+		else prev_read = 0;
+		total_bytes -= prev_read;
+		last_lock->release();
+		return at;
+	}
+	ByteArray ConQueue::peek_bytes(size_t num_bytes) {
+		ByteArray rtn;
+		QBlk *my_last = 0;
+		QBlk *peek_first = first;
+		while (true) {
+			last_lock->acquire();
+			if (my_last != last) my_last = last;
+			else break;//break while the lock is held to preserve the current synchronized state
+			last_lock->release();
+			while (peek_first != my_last)
+			{
+				QBlk *next = peek_first->next;
+				if (peek_first->data.length() <= num_bytes)
+				{
+					rtn += peek_first->data;
+					num_bytes -= peek_first->data.length();
+					peek_first = next;
+				}
+				else
+				{
+					rtn += peek_first->data.sub_array(0, num_bytes);
+					num_bytes = 0;
+				}
+				if (num_bytes == 0) return rtn;
+			}
+		}
+		while (num_bytes > 0) {
+			if (peek_first->data.length() <= num_bytes)
+			{
+				rtn += peek_first->data;
+				num_bytes -= peek_first->data.length();
+			}
+			else
+			{
+				rtn += peek_first->data.sub_array(0, num_bytes);
+				num_bytes = 0;
+			}
+			if (num_bytes == 0) break;
+			while (!peek_first->next) last_cond->wait();
+			peek_first = peek_first->next;
+		}
+		last_lock->release();
+		return rtn;
+	}
+	void ConQueue::put_bytes(const ByteArray &bytes) {
+		QBlk &add = *new QBlk();
+		add.data = bytes;
+		add.next = 0;
+		last_lock->acquire();
+		//total_bytes += add.data.length();
+		atomic_add(total_bytes, add.data.length());
+		if (last != 0)
+		{
+			last->next = &add;
+			last = last->next;
+		}
+		else
+		{
+			last = &add;
+			first = last;
+		}
+		last_cond->notify();
+		last_lock->release();
+	}
+	void ConQueue::put_bytes(ByteArray &&bytes) {
+		QBlk &add = *new QBlk();
+		add.data = (ByteArray &&)bytes;
+		add.next = 0;
+		last_lock->acquire();
+		//total_bytes += add.data.length();
+		atomic_add(total_bytes, add.data.length());
+		if (last != 0)
+		{
+			last->next = &add;
+			last = last->next;
+		}
+		else
+		{
+			last = &add;
+			first = last;
+		}
+		last_cond->notify();
+		last_lock->release();
+	}
+	void ConQueue::clear(size_t num_bytes) {
+		Lock Lk(last_lock);
+		if (num_bytes >= total_bytes)
+		{
+			while (first != last)
+			{
+				QBlk *next = first->next;
+				delete first;
+				first = next;
+			}
+			if (last != 0) delete last;
+			total_bytes = 0;
+			first = 0;
+			last = 0;
+			return;
+		}
+		while (first != last) {
+			size_t num_clear = first->data.length();
+			if (num_bytes > num_clear)
+			{
+				//total_bytes -= num_clear;
+				atomic_sub(total_bytes, num_clear);
+				num_bytes -= num_clear;
+				QBlk *next = first->next;
+				delete first;
+				first = next;
+			}
+			else if (num_bytes == num_clear)
+			{
+				QBlk *next = first->next;
+				delete first;
+				first = next;
+				//total_bytes -= num_clear;
+				atomic_sub(total_bytes, num_clear);
+				break;
+			}
+			else
+			{
+				first->data.remove_from_start(num_bytes);
+				//total_bytes -= num_bytes;
+				atomic_sub(total_bytes, num_bytes);
+				break;
+			}
+		}
+	}

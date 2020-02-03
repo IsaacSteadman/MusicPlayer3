@@ -1,3 +1,10 @@
 settings.json
 __pycache__
 *.pyc
+win32/*.exp
+win32/*.lib
+win32/*.obj
+win32/*.dll
+venv
+.idea
+.vscode
