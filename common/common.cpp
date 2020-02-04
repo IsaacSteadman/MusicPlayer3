@@ -9,7 +9,9 @@ const double NormC2 = pow(107.7, 2);
 const double NormC3 = pow(737.9, 2);
 const double NormC4 = pow(10, .2);
 const double NormC5 = pow(NormC1, 2);
-double normalizer(double x) {
+
+// calculate the human threshold for hearing adjustment coefficient given frequency x in hertz
+double calc_hth_adjust_coef(double x) {
     if (x == 0) return 1;
     double a = x * x;
     double n = pow(a + NormC0, 2) * pow(a + NormC1, 2) * (a + NormC2) * (a + NormC3);
@@ -28,9 +30,11 @@ void conv_to_doubles(signed short *pcm, double *data, size_t len) {
   }
 }
 
-void normalize_human(double *arr, size_t num_points, float sample_rate) {
-  for (size_t x = 0; x < num_points; ++x) {
-    arr[x] /= normalizer(sample_rate * x / num_points);
+// adjust for human threshold for hearing
+void adjust_hth(double *arr, size_t num_points, float sample_rate) {
+  size_t n2 = num_points >> 1;
+  for (size_t x = 1; x < n2; ++x) {
+    arr[x] /= calc_hth_adjust_coef(sample_rate * x / num_points);
   }
 }
 
@@ -110,6 +114,7 @@ extern "C" {
   FASTMUSICPLAYER_EXPORT void thread_function() {
     thread_running = true;
     const size_t fft_size = real_fft_size;
+    const size_t fft_size2 = fft_size >> 1;
     const double sample_rate = real_sample_rate;
     fmp::ByteArray data_buf{(uint8_t)0, 2 * fft_size * sizeof(int16_t)};
     fmp::Array<double> db_buf{(double)0, 2 * fft_size};
@@ -120,28 +125,33 @@ extern "C" {
         conv_to_doubles((int16_t *)data_buf.get_data(), db_buf.get_data(), fft_size);
         double *a = db_buf.get_data();
         double *b = db_buf.get_data() + fft_size;
-        fft(a, fft_size >> 1);
-        fft(b, fft_size >> 1);
-        double a_max = 0.01;
-        double b_max = 0.01;
-        for (size_t i = 1; i < (fft_size >> 1); ++i) {
+        fft(a, fft_size2);
+        fft(b, fft_size2);
+        for (size_t i = 1; i < fft_size2; ++i) {
           size_t j = fft_size - i;
           double x, y;
-          double freq = sample_rate * i / fft_size;
           x = a[i];
           y = a[j];
           double m = sqrt(x * x + y * y);
-          if (a_max < m) a_max = m;
           a[i] = m;
           a[j] = atan2(y, x);
           x = b[i];
           y = b[j];
           m = sqrt(x * x + y * y);
-          if (b_max < m) b_max = m;
           b[i] = m;
           b[j] = atan2(y, x);
         }
-        for (size_t i = 1; i < fft_size; ++i) {
+        adjust_hth(a, fft_size, sample_rate);
+        adjust_hth(b, fft_size, sample_rate);
+        double a_max = 0.01;
+        double b_max = 0.01;
+        for (size_t i = 1; i < fft_size2; ++i) {
+          double x = a[i];
+          if (x > a_max) a_max = x;
+          x = b[i];
+          if (x > b_max) b_max = x;
+        }
+        for (size_t i = 1; i < fft_size2; ++i) {
           a[i] /= a_max;
           b[i] /= b_max;
         }

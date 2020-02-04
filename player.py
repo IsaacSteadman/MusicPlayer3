@@ -269,7 +269,7 @@ class PlayerApp(App):
         self.settings = settings_obj
         self.fx_cb = fmp.get_sdl_mixer_registered()
         self.num_fft_points = 2048
-        fmp.fmp_init(self.num_fft_points, 44.100);
+        fmp.fmp_init(self.num_fft_points, 44100.0);
         self.expected_bytes = fmp.get_expected_out_buf_size()
         self.fft_out_buf = (ctypes.c_double * (self.expected_bytes // ctypes.sizeof(ctypes.c_double)))();
         self.fft_counters = (ctypes.c_size_t * 3)();
