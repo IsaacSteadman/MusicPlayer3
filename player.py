@@ -50,8 +50,10 @@ fmp.get_total_bytes_out.restype = ctypes.c_size_t
 fmp.get_total_bytes_out.argtypes = []
 fmp.get_expected_out_buf_size.restype = ctypes.c_size_t
 fmp.get_expected_out_buf_size.argtypes = []
-fmp.get_counters.restype = None
-fmp.get_counters.argtypes = [ctypes.POINTER(ctypes.c_size_t)]
+fmp.fmp_pause.restype = None
+fmp.fmp_pause.argtypes = []
+fmp.fmp_unpause.restype = None
+fmp.fmp_unpause.argtypes = []
 
 
 try:
@@ -71,6 +73,13 @@ prev = os.getcwd()
 os.chdir(settings["musicDir"])
 playlists = load_playlists(os.path.join(settings["musicDir"], "playlists.json"))
 os.chdir(prev)
+
+
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 
 
 class VolumeControl(Label):
@@ -265,7 +274,7 @@ class PlayerApp(App):
         self.fft_counters = (ctypes.c_size_t * 3)();
         self.thread = Thread(target=thread_function_runner,args=())
         self.thread.start()
-        self.visual_left = VisualizerControl2(64, 512, 1, (self.num_fft_points >> 1) - 1, (320 - 256, 480 - 64), (0, 0, 255), (0, 255, 0))
+        self.visual_left = VisualizerControl2(64, 512, 1, (self.num_fft_points >> 1) - 1, (320 - 256, 480 - 64), BLUE, GREEN)
         vol = settings_obj.get("volume", 128)
         if not isinstance(vol, int):
             print("WARN: expected settings.volume to be an integer")
@@ -375,6 +384,27 @@ class PlayerApp(App):
             "mod!&": pygame.KMOD_SHIFT,
             "mod&": pygame.KMOD_ALT
         })
+        self.loop_btn.lst_colors = [(BLUE, WHITE), (GREEN, BLACK)]
+        self.song_btn.lst_colors = [(BLUE, WHITE), (GREEN, BLACK)]
+        self.play_btn.off_color = (BLUE, WHITE)
+        self.play_btn.on_color = (GREEN, BLACK)
+        self.pause_btn.lst_colors = [(BLUE, WHITE), (GREEN, BLACK)]
+        self.next_in_list_btn.off_color = (BLUE, WHITE)
+        self.next_in_list_btn.on_color = (GREEN, BLACK)
+        self.prev_in_list_btn.off_color = (BLUE, WHITE)
+        self.prev_in_list_btn.on_color = (GREEN, BLACK)
+        self.prev_5_sec_btn.off_color = (BLUE, WHITE)
+        self.prev_5_sec_btn.on_color = (GREEN, BLACK)
+        self.prev_10_sec_btn.off_color = (BLUE, WHITE)
+        self.prev_10_sec_btn.on_color = (GREEN, BLACK)
+        self.skip_5_sec_btn.off_color = (BLUE, WHITE)
+        self.skip_5_sec_btn.on_color = (GREEN, BLACK)
+        self.skip_10_sec_btn.off_color = (BLUE, WHITE)
+        self.skip_10_sec_btn.on_color = (GREEN, BLACK)
+        self.prev_in_hist_btn.off_color = (BLUE, WHITE)
+        self.prev_in_hist_btn.on_color = (GREEN, BLACK)
+        self.next_in_hist_btn.off_color = (BLUE, WHITE)
+        self.next_in_hist_btn.on_color = (GREEN, BLACK)
         self.ctls = [
             self.loop_btn,
             self.song_btn,
@@ -500,9 +530,17 @@ class PlayerApp(App):
         return "%u:%02u" % divmod(pos, 60)
 
     def pause_music_action(self, btn, pos):
+        self.pause()
+    
+    def pause(self):
+        fmp.fmp_pause()
         music.pause()
 
     def unpause_music_action(self, btn, pos):
+        self.unpause()
+    
+    def unpause(self):
+        fmp.fmp_unpause()
         music.unpause()
 
     def play_song(self):
@@ -538,6 +576,8 @@ class PlayerApp(App):
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, {}))
         self.SDL_mixer.Mix_UnregisterEffect(find_SDL_Mixer.MIX_CHANNEL_POST, self.fx_cb)
         self.SDL_mixer.Mix_RegisterEffect(find_SDL_Mixer.MIX_CHANNEL_POST, self.fx_cb, 0, 0)
+        if self.pause_btn.cur_state:
+            self.pause()
         # self.SDL_mixer.Mix_SetPostMix(find_SDL_Mixer.cb, 0)
 
     def seek(self, pos: Number = 0, rel: bool = True):
@@ -563,6 +603,8 @@ class PlayerApp(App):
         self.cur_off = pos
         self.SDL_mixer.Mix_UnregisterEffect(find_SDL_Mixer.MIX_CHANNEL_POST, self.fx_cb)
         self.SDL_mixer.Mix_RegisterEffect(find_SDL_Mixer.MIX_CHANNEL_POST, self.fx_cb, 0, 0)
+        if self.pause_btn.cur_state:
+            self.pause()
         # self.SDL_mixer.Mix_SetPostMix(find_SDL_Mixer.cb, 0)
 
     def pick_song(self):

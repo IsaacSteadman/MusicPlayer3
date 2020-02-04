@@ -41,9 +41,11 @@ static fmp::ConQueue * volatile fft_out_queue = nullptr;
 
 static volatile bool running = false;
 static volatile bool thread_running = false;
+static volatile bool paused = false;
 
 void post_mix_effect_cb(void *udata, uint8_t *stream, int len) {
   if (!running) return;
+  if (paused) return;
   if (raw_data_queue->length() >= MAX_BYTES) return;
   fmp::ByteArray arr;
   arr.take(stream, len);
@@ -51,16 +53,10 @@ void post_mix_effect_cb(void *udata, uint8_t *stream, int len) {
   arr.give();
 }
 
-static size_t count_rec0 = 0;
-static size_t count_rec1 = 0;
-static size_t count_rec2 = 0;
-
 void registered_effect_cb(int chan, uint8_t *stream, int len, void *udata) {
-  ++count_rec0;
   if (!running) return;
-  ++count_rec1;
+  if (paused) return;
   if (raw_data_queue->length() >= MAX_BYTES) return;
-  ++count_rec2;
   fmp::ByteArray arr;
   arr.take(stream, len);
   raw_data_queue->put_bytes(arr);
@@ -104,6 +100,12 @@ extern "C" {
   FASTMUSICPLAYER_EXPORT bool fmp_shutdown() {
     set_shutdown_state(true);
     return wait_shutdown();
+  }
+  FASTMUSICPLAYER_EXPORT void fmp_pause() {
+    paused = true;
+  }
+  FASTMUSICPLAYER_EXPORT void fmp_unpause() {
+    paused = false;
   }
   FASTMUSICPLAYER_EXPORT void thread_function() {
     thread_running = true;
@@ -185,14 +187,6 @@ extern "C" {
   }
   FASTMUSICPLAYER_EXPORT void *get_sdl_mixer_registered() {
     return registered_effect_cb;
-  }
-  FASTMUSICPLAYER_EXPORT void get_counters(size_t *counters) {
-    counters[0] = count_rec0;
-    counters[1] = count_rec1;
-    counters[2] = count_rec2;
-    count_rec0 = 0;
-    count_rec1 = 0;
-    count_rec2 = 0;
   }
   void fft(double* data, size_t nn)
 	{
