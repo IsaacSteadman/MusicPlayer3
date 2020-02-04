@@ -146,6 +146,15 @@ def bound_int(v: float, mn: int, mx: int) -> int:
     return min(mx, max(mn, int(v)))
 
 
+def linear_mix(a: float, pt0: float, pt1: float) -> float:
+    return (1 - a) * pt0 + a * pt1
+
+
+def linear_multi_mix(a: float, data: List[float]) -> float:
+    assert len(data) >= 2
+    return  linear_mix(a, data[0], data[1]) + sum(data[1:-1])/float(len(data) - 1)
+
+
 class VisualizerControl2(PygCtl):
     def __init__(self, height: int, width: int, bar_width: int, num_points: int, pos: Tuple[int, int], zero_color: Color, one_color: Color):
         super().__init__()
@@ -160,18 +169,39 @@ class VisualizerControl2(PygCtl):
         self.zero_idx = 1
         self.prev_time = 0
         self.max_idx = len(self.data) - 1
-        # a = (log2(width + 1) - log2(1)) / (num_points / 2)
-        a = log2(num_points)
-        self.points = [None] * width
-        for i in range(1, num_points):
-            low = int(log2(max(i - 1, 1)) / a * width)
-            high = int(log2(i) / a * width)
-            for i1 in range(low, high):
-                self.points[i1] = (i / (high - low), i - 1, i)
-        # self.ranges = [
-        #     (bound_int(2 ** ((i - 0.5) * a), 0, self.max_idx), bound_int(2 ** ((i + 0.5) * a), 0, self.max_idx))
-        #     for i in range(self.zero_idx, self.max_idx + 1)
-        # ]
+        self.single_mix = linear_mix
+        self.multi_mix = linear_multi_mix
+        start = 1
+        stop = num_points
+        scale_start = log2(start)
+        scale_stop = log2(stop)
+        scale_step = (scale_stop - scale_start) / width
+        self.lst_pt_ranges = [
+            (
+                max(0, 2 ** ((x - 0.5) * scale_step) * start),
+                min(num_points - 1, 2 ** ((x + 0.5) * scale_step) * start)
+            )
+            for x in range(width // bar_width)
+        ]
+    
+    def get_at_pt(self, pt: float) -> float:
+        data = self.data
+        l_pt = int(pt)
+        if 0 <= pt < len(data) and pt == l_pt:
+            return data[pt]
+        a = pt - l_pt
+        u_pt = int(pt) + 1
+        l_v = self.get_at_pt(l_pt)
+        u_v = self.get_at_pt(u_pt)
+        return self.single_mix(a, l_v, u_v)
+    
+    def get_at_pt_range(self, pt0: float, pt1: float) -> float:
+        ipt0 = int(pt0)
+        ipt1 = int(pt1)
+        if ipt0 == ipt1:
+            return (self.get_at_pt(pt0) + self.get_at_pt(pt1)) / 2.0
+        a = pt0 - ipt0
+        return self.multi_mix(a, self.data[ipt0:ipt1 + 1])
     
     # only uses __len__ and __getitem__
     def update_data(self, app: "PlayerApp", data: Sequence[float], start: Optional[int]=None, end: Optional[int]=None, step: Optional[int]=None):
@@ -200,39 +230,16 @@ class VisualizerControl2(PygCtl):
         if disp:
             self.prev_time = current
         disp = False
-        for x, obj in enumerate(self.points):
-            if obj is None:
-                continue
-            a, lower, upper = obj
-            l_v = data[lower]
-            u_v = data[upper]
-            v = max(0, min(1, (1 - a) * l_v + a * u_v))
+        for x, (pt0, pt1) in enumerate(self.lst_pt_ranges):
+            v = self.get_at_pt_range(pt0, pt1)
+            if v < 0:
+                v = 0
+            elif v > 1:
+                v = 1
             xr = bound_int(v * yr + (1 - v) * zr, 0, 255)
             xg = bound_int(v * yg + (1 - v) * zg, 0, 255)
             xb = bound_int(v * yb + (1 - v) * zb, 0, 255)
             app.surf.fill((xr, xg, xb), Rect((x * bw + posx, bottom - int(height * v)), (bw, int(height * v))))
-        # if disp:
-        #     print("=" * 80)
-        # for i, (lower, upper) in enumerate(self.ranges):
-        #     if disp:
-        #         print("lower, upper = %u, %u" % (lower, upper))
-        #     if upper - lower > 0:
-        #         u_v = data[upper]
-        #         l_v = data[lower]
-        #         for shift, px_pos in enumerate(range(lower, upper + 1, bw)):
-        #             try:
-        #                 a = (px_pos - lower) / (upper - lower)
-        #             except:
-        #                 a = 1
-        #             v = a * u_v + (1 - a) * l_v
-        #             if disp:
-        #                 print("|" + " ".join(map("%.3g".__mod__, [a, v, u_v, l_v])) + "|",end="")
-        #             xr = bound_int(v * yr + (1 - v) * zr, 0, 255)
-        #             xg = bound_int(v * yg + (1 - v) * zg, 0, 255)
-        #             xb = bound_int(v * yb + (1 - v) * zb, 0, 255)
-        #             app.surf.fill((xr, xg, xb), Rect((i * bw + posx, bottom - int(height * v)), (bw, int(height * v))))
-        # if disp:
-        #     print("\n" + "=" * 80)
         return [self.tot_rect]
     
     def pre_draw(self, app: "PlayerApp"):
