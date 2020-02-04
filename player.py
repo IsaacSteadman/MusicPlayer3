@@ -3,6 +3,7 @@ import pygame
 import os
 import random
 import json
+import time
 from threading import Thread
 from typing import List, Optional, Tuple, Sequence
 
@@ -19,6 +20,7 @@ from PygGUI2.uix.pyg_ctl import PygCtl
 from mp3meta import Mp3Info
 import find_SDL_Mixer
 import ctypes
+from math import log2
 
 
 base_dir = os.path.dirname(__file__)
@@ -140,6 +142,103 @@ class VisualizerControl(PygCtl):
         return [app.draw_background_rect(self.tot_rect)]
 
 
+def bound_int(v: float, mn: int, mx: int) -> int:
+    return min(mx, max(mn, int(v)))
+
+
+class VisualizerControl2(PygCtl):
+    def __init__(self, height: int, width: int, bar_width: int, num_points: int, pos: Tuple[int, int], zero_color: Color, one_color: Color):
+        super().__init__()
+        self.height = height
+        self.width = width
+        self.tot_rect = pygame.Rect(pos, (width, height))
+        self.pos = pos
+        self.zero_color = zero_color
+        self.one_color = one_color
+        self.bar_width = bar_width
+        self.data = [0.0] * num_points
+        self.zero_idx = 1
+        self.prev_time = 0
+        self.max_idx = len(self.data) - 1
+        # a = (log2(width + 1) - log2(1)) / (num_points / 2)
+        a = log2(num_points)
+        self.points = [None] * width
+        for i in range(1, num_points):
+            low = int(log2(max(i - 1, 1)) / a * width)
+            high = int(log2(i) / a * width)
+            for i1 in range(low, high):
+                self.points[i1] = (i / (high - low), i - 1, i)
+        # self.ranges = [
+        #     (bound_int(2 ** ((i - 0.5) * a), 0, self.max_idx), bound_int(2 ** ((i + 0.5) * a), 0, self.max_idx))
+        #     for i in range(self.zero_idx, self.max_idx + 1)
+        # ]
+    
+    # only uses __len__ and __getitem__
+    def update_data(self, app: "PlayerApp", data: Sequence[float], start: Optional[int]=None, end: Optional[int]=None, step: Optional[int]=None):
+        if start is None:
+            start = 0
+        if end is None:
+            end = len(data)
+        if step is None:
+            step = 1
+        end = min(end, (start + len(self.data)) * step)
+        for self_idx, i in enumerate(range(start, end, step)):
+            self.data[self_idx] = max(0.0, min(1.0, data[i]))
+        app.set_redraw(self)
+    
+    def draw(self, app: "PlayerApp"):
+        Rect = pygame.Rect
+        zr, zg, zb = self.zero_color
+        yr, yg, yb = self.one_color
+        posx, posy = self.pos
+        height = self.height
+        bottom = posy + height
+        bw = self.bar_width
+        data = self.data
+        current = time.time()
+        disp = current - self.prev_time > 15
+        if disp:
+            self.prev_time = current
+        disp = False
+        for x, obj in enumerate(self.points):
+            if obj is None:
+                continue
+            a, lower, upper = obj
+            l_v = data[lower]
+            u_v = data[upper]
+            v = max(0, min(1, (1 - a) * l_v + a * u_v))
+            xr = bound_int(v * yr + (1 - v) * zr, 0, 255)
+            xg = bound_int(v * yg + (1 - v) * zg, 0, 255)
+            xb = bound_int(v * yb + (1 - v) * zb, 0, 255)
+            app.surf.fill((xr, xg, xb), Rect((x * bw + posx, bottom - int(height * v)), (bw, int(height * v))))
+        # if disp:
+        #     print("=" * 80)
+        # for i, (lower, upper) in enumerate(self.ranges):
+        #     if disp:
+        #         print("lower, upper = %u, %u" % (lower, upper))
+        #     if upper - lower > 0:
+        #         u_v = data[upper]
+        #         l_v = data[lower]
+        #         for shift, px_pos in enumerate(range(lower, upper + 1, bw)):
+        #             try:
+        #                 a = (px_pos - lower) / (upper - lower)
+        #             except:
+        #                 a = 1
+        #             v = a * u_v + (1 - a) * l_v
+        #             if disp:
+        #                 print("|" + " ".join(map("%.3g".__mod__, [a, v, u_v, l_v])) + "|",end="")
+        #             xr = bound_int(v * yr + (1 - v) * zr, 0, 255)
+        #             xg = bound_int(v * yg + (1 - v) * zg, 0, 255)
+        #             xb = bound_int(v * yb + (1 - v) * zb, 0, 255)
+        #             app.surf.fill((xr, xg, xb), Rect((i * bw + posx, bottom - int(height * v)), (bw, int(height * v))))
+        # if disp:
+        #     print("\n" + "=" * 80)
+        return [self.tot_rect]
+    
+    def pre_draw(self, app: "PlayerApp"):
+        return [app.draw_background_rect(self.tot_rect)]
+
+
 def thread_function_runner():
     fmp.thread_function()
     print("Thread is dead")
@@ -159,7 +258,7 @@ class PlayerApp(App):
         self.fft_counters = (ctypes.c_size_t * 3)();
         self.thread = Thread(target=thread_function_runner,args=())
         self.thread.start()
-        self.visual_left = VisualizerControl(64, 512, 1, (320 - 256, 480 - 64), (0, 0, 255), (0, 255, 0))
+        self.visual_left = VisualizerControl2(64, 512, 1, (self.num_fft_points >> 1) - 1, (320 - 256, 480 - 64), (0, 0, 255), (0, 255, 0))
         vol = settings_obj.get("volume", 128)
         if not isinstance(vol, int):
             print("WARN: expected settings.volume to be an integer")
@@ -369,10 +468,7 @@ class PlayerApp(App):
                 print("False")
             else:
                 out_buf = self.fft_out_buf
-                data = [(out_buf[i] + out_buf[i + 1]) / 2 for i in range(1, (self.num_fft_points >> 1) - 1, 2)]
-                self.visual_left.update_data(self, data)
-        else:
-            print("Nothing")
+                self.visual_left.update_data(self, out_buf, 1, self.num_fft_points >> 1)
         # fmp.get_counters(self.fft_counters)
         # print("rec0 = %u, rec1 = %u, rec2 = %u" % (self.fft_counters[0], self.fft_counters[1], self.fft_counters[2]))
         return True
