@@ -63,7 +63,8 @@ except FileNotFoundError:
     settings = {
         "musicDir": ".",
         "volume": 128,
-        "max_ban": 12
+        "max_ban": 12,
+        "size": "normal"
     }
     with open(os.path.join(base_dir, "settings.json"), "w") as fl:
         json.dump(settings, fl)
@@ -261,7 +262,7 @@ def thread_function_runner():
 
 
 class PlayerApp(App):
-    def __init__(self, surf: pygame.SurfaceType, playlists_obj: List[Playlist], settings_obj: dict, mixer_freq: int):
+    def __init__(self, surf: pygame.SurfaceType, playlists_obj: List[Playlist], size_code: int, settings_obj: dict, mixer_freq: int):
         super().__init__(surf)
         self.mixer_freq = mixer_freq
         self.playlists = playlists_obj
@@ -274,7 +275,7 @@ class PlayerApp(App):
         self.fft_counters = (ctypes.c_size_t * 3)();
         self.thread = Thread(target=thread_function_runner,args=())
         self.thread.start()
-        self.visual_left = VisualizerControl2(64, 512, 1, (self.num_fft_points >> 1) - 1, (320 - 256, 480 - 64), BLUE, GREEN)
+        self.visual_left = VisualizerControl2(64 if size_code != SIZE_LARGER else 256, 512 if size_code != SIZE_LARGER else 1024, 1, (self.num_fft_points >> 1) - 1, (320 - 256, 480 - 64), BLUE, GREEN)
         vol = settings_obj.get("volume", 128)
         if not isinstance(vol, int):
             print("WARN: expected settings.volume to be an integer")
@@ -308,16 +309,17 @@ class PlayerApp(App):
         self.pause_btn.add_glob_capture(pygame.KEYDOWN, {
             "key": pygame.K_SPACE
         })
+        width = 1024 if size_code == SIZE_LARGER else 512
         self.prog_bar = ProgressBar(
-            (64, 240), (512, 4), ((127, 127, 127), (0, 255, 255)), self.prog_bar_action,
+            (64, 240), (width, 4), ((127, 127, 127), (0, 255, 255)), self.prog_bar_action,
             TooltipInfo(
                 self.prog_bar_hover, self.sub_fnt, ((127, 127, 127), (0, 255, 255))
             )
         )
         self.time_elapse_lbl = Label("", (64, 244), self.sub_fnt, centered=X_ALIGN_LEFT)
-        self.time_left_lbl = Label("", (512 + 64, 244), self.sub_fnt, centered=X_ALIGN_RIGHT)
-        self.total_time_lbl = Label("", (64 + 512 // 2, 244), self.sub_fnt, centered=X_ALIGN_MID)
-        self.vol_ctrl = VolumeControl((64 + 512 // 2, 244 + 16 + 3), self.sub_fnt, centered=X_ALIGN_MID)
+        self.time_left_lbl = Label("", (width + 64, 244), self.sub_fnt, centered=X_ALIGN_RIGHT)
+        self.total_time_lbl = Label("", (64 + width // 2, 244), self.sub_fnt, centered=X_ALIGN_MID)
+        self.vol_ctrl = VolumeControl((64 + width // 2, 244 + 16 + 3), self.sub_fnt, centered=X_ALIGN_MID)
         self.next_in_list_btn = PressButton(
             "Next In Playlist", self.next_in_list_action,
             (64, 244 + 19), self.sub_fnt
@@ -684,6 +686,8 @@ def mainloop():
 
 
 job = 1
+SIZE_NORMAL = 2
+SIZE_LARGER = 3
 
 
 if __name__ == "__main__":
@@ -703,11 +707,24 @@ if __name__ == "__main__":
         pygame.quit()
     else:
         pygame.display.init()
-        surf = pygame.display.set_mode((640, 480))
+        try:
+            size_code = {
+                "normal": SIZE_NORMAL,
+                "larger": SIZE_LARGER
+            }[settings["size"]]
+        except KeyError:
+            size_code = SIZE_NORMAL
+        if size_code == SIZE_NORMAL:
+            width, height = 640, 480
+        elif size_code == SIZE_LARGER:
+            width, height = 640 - 512 + 1024, 480 - 64 + 256
+        else:
+            raise ValueError("expected size_code to be one of [SIZE_NORMAL, SIZE_LARGER]")
+        surf = pygame.display.set_mode((width, height))
         pygame.mixer.init(frequency=44100)
         pygame.font.init()
         music.set_endevent(pygame.USEREVENT)
-        app = PlayerApp(surf, playlists, settings, 44100)
+        app = PlayerApp(surf, playlists, size_code, settings, 44100)
         app.run()
         fmp.fmp_shutdown()
         pygame.quit()
