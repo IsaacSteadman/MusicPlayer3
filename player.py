@@ -254,6 +254,29 @@ class VisualizerControl2(PygCtl):
     
     def pre_draw(self, app: "PlayerApp"):
         return [app.draw_background_rect(self.tot_rect)]
+    
+    def on_evt_global(self, app: "PlayerApp", evt):
+        if evt.type == pygame.VIDEORESIZE:
+            width, height = evt.size
+            self.height = min(256, max(64, height - 416))
+            self.pos = (0, height - self.height)
+            self.width = width
+            self.tot_rect = pygame.Rect(self.pos, (self.width, self.height))
+            start = 1
+            stop = len(self.data)
+            scale_start = log2(start)
+            scale_stop = log2(stop)
+            scale_step = (scale_stop - scale_start) / width
+            self.lst_pt_ranges = [
+                (
+                    max(0, 2 ** ((x - 0.5) * scale_step) * start),
+                    min(stop - 1, 2 ** ((x + 0.5) * scale_step) * start)
+                )
+                for x in range(self.width // self.bar_width)
+            ]
+            print("resize", evt.size)
+            return True
+        return False
 
 
 def thread_function_runner():
@@ -269,6 +292,7 @@ class PlayerApp(App):
         self.settings = settings_obj
         self.fx_cb = fmp.get_sdl_mixer_registered()
         self.num_fft_points = 2048
+        self.size_code = size_code
         fmp.fmp_init(self.num_fft_points, 44100.0);
         self.expected_bytes = fmp.get_expected_out_buf_size()
         self.fft_out_buf = (ctypes.c_double * (self.expected_bytes // ctypes.sizeof(ctypes.c_double)))();
@@ -437,8 +461,16 @@ class PlayerApp(App):
         self.cur_off: int = 0
         self.dct_global_event_func[pygame.USEREVENT] = self.on_music_done
         self.dct_global_event_func[pygame.USEREVENT + 1] = self.on_tick
-        pygame.time.set_timer(pygame.USEREVENT + 1, 1000 // 50)
-        self.pick_song()
+        self.tps = 50
+        self.tick_num = 0
+        self.prev_tps_tick_time = time.time()
+        pygame.time.set_timer(pygame.USEREVENT + 1, 1000 // self.tps)
+        # self.pick_song()
+        song_idx = 0
+        for song_idx, song_name in enumerate(self.cur_p.playlist.songs):
+            if song_name.endswith("Stardust.fast.mp3"):
+                break
+        self.cur_p.pick_manual(song_idx)
         self.song_hist_idx = 0
         self.song_hist = [self.cur_p.idx]
         self.SDL_mixer = find_SDL_Mixer.ctypes.CDLL(find_SDL_Mixer.find_sdl_mixer_name())
@@ -498,10 +530,19 @@ class PlayerApp(App):
         self.play_song()
 
     def on_tick(self, evt):
-        self.prog_bar.set_value(self, (self.cur_off + music.get_pos()) / (self.cur_song_duration * 1000))
-        pos = (self.cur_off + music.get_pos()) / 1000
-        self.time_elapse_lbl.set_lbl(self, "%u:%02u" % divmod(int(pos), 60))
-        self.time_left_lbl.set_lbl(self, "%u:%02u" % divmod(int(self.cur_song_duration - pos), 60))
+        self.tick_num += 1
+        if self.tick_num >= self.tps:
+            self.tick_num -= self.tps
+            t = time.time()
+            t1 = self.prev_tps_tick_time
+            self.prev_tps_tick_time = t
+            if (t1 - t) > 1.0:
+                return True
+        if self.tick_num % 5 == 0:
+            self.prog_bar.set_value(self, (self.cur_off + music.get_pos()) / (self.cur_song_duration * 1000))
+            pos = (self.cur_off + music.get_pos()) / 1000
+            self.time_elapse_lbl.set_lbl(self, "%u:%02u" % divmod(int(pos), 60))
+            self.time_left_lbl.set_lbl(self, "%u:%02u" % divmod(int(self.cur_song_duration - pos), 60))
         if fmp.get_total_bytes_out() >= self.expected_bytes:
             if not fmp.fill_output_buf(self.fft_out_buf):
                 print("False")
@@ -594,6 +635,8 @@ class PlayerApp(App):
                 self.SDL_mixer.Mix_UnregisterEffect(find_SDL_Mixer.MIX_CHANNEL_POST, self.fx_cb)
                 self.SDL_mixer.Mix_RegisterEffect(find_SDL_Mixer.MIX_CHANNEL_POST, self.fx_cb, 0, 0)
                 # self.SDL_mixer.Mix_SetPostMix(find_SDL_Mixer.cb, 0)
+                if self.pause_btn.cur_state:
+                    self.pause()
                 return
             else:
                 pos = max(music.get_pos() + self.cur_off + pos, 0)
