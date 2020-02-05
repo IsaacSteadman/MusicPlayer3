@@ -275,6 +275,7 @@ class VisualizerControl2(PygCtl):
                 for x in range(self.width // self.bar_width)
             ]
             print("resize", evt.size)
+            app.on_resize(evt.size)
             return True
         return False
 
@@ -462,8 +463,9 @@ class PlayerApp(App):
         self.dct_global_event_func[pygame.USEREVENT] = self.on_music_done
         self.dct_global_event_func[pygame.USEREVENT + 1] = self.on_tick
         self.tps = 50
+        self.exp_tick_t = 1.0 / self.tps
         self.tick_num = 0
-        self.prev_tps_tick_time = time.time()
+        self.record_busy_time_interval = 2.0
         pygame.time.set_timer(pygame.USEREVENT + 1, 1000 // self.tps)
         # self.pick_song()
         song_idx = 0
@@ -479,6 +481,13 @@ class PlayerApp(App):
         self.SDL_mixer.Mix_RegisterEffect.restype = ctypes.c_int
         self.SDL_mixer.Mix_RegisterEffect.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
         self.play_song()
+
+    def on_resize(self, size: Tuple[int, int]):
+        width, height = size
+        self.time_left_lbl.set_lbl(self, self.time_left_lbl.lbl, pos=(width - 128 + 64, 244))
+        self.total_time_lbl.set_lbl(self, self.total_time_lbl.lbl, pos=(64 + (width - 128) // 2, 244))
+        self.vol_ctrl.set_lbl(self, self.vol_ctrl.lbl, pos=(64 + (width - 128) // 2, 244 + 16 + 3))
+        self.prog_bar.set_pos_size(self, None, (width - 128, 4))
 
     def on_music_done(self, evt):
         self.next_song()
@@ -531,13 +540,6 @@ class PlayerApp(App):
 
     def on_tick(self, evt):
         self.tick_num += 1
-        if self.tick_num >= self.tps:
-            self.tick_num -= self.tps
-            t = time.time()
-            t1 = self.prev_tps_tick_time
-            self.prev_tps_tick_time = t
-            if (t1 - t) > 1.0:
-                return True
         if self.tick_num % 5 == 0:
             self.prog_bar.set_value(self, (self.cur_off + music.get_pos()) / (self.cur_song_duration * 1000))
             pos = (self.cur_off + music.get_pos()) / 1000
@@ -548,6 +550,9 @@ class PlayerApp(App):
                 print("False")
             else:
                 out_buf = self.fft_out_buf
+                if self.num_recorded > 10 and self.non_busy_time < 0.005:
+                    print("Dropped a tick %u" % self.tick_num)
+                    return True
                 self.visual_left.update_data(self, out_buf, 1, self.num_fft_points >> 1)
         # fmp.get_counters(self.fft_counters)
         # print("rec0 = %u, rec1 = %u, rec2 = %u" % (self.fft_counters[0], self.fft_counters[1], self.fft_counters[2]))
@@ -613,6 +618,7 @@ class PlayerApp(App):
             music.play()
             self.cur_off = 0
             print("Playing:", self.cur_p.cur_song)
+            pygame.display.set_caption("Music Player - " + self.cur_p.cur_song.replace("\\", "/").rsplit("/", 1)[-1])
             self.playing = True
         except Exception as exc:
             print(exc)
