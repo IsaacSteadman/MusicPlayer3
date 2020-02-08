@@ -558,8 +558,6 @@ class PlayerApp(App):
                     print("Dropped a tick %u" % self.tick_num)
                     return True
                 self.visual_left.update_data(self, out_buf, 1, self.num_fft_points >> 1)
-        # fmp.get_counters(self.fft_counters)
-        # print("rec0 = %u, rec1 = %u, rec2 = %u" % (self.fft_counters[0], self.fft_counters[1], self.fft_counters[2]))
         return True
 
     @property
