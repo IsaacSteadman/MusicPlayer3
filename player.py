@@ -30,6 +30,10 @@ if os.name == "posix":
     fmp = ctypes.CDLL(os.path.join(base_dir, "linux", "libFastMusicPlayer.so"))
 elif os.name == "nt":
     fmp = ctypes.CDLL(os.path.join(base_dir, "win32", "FastMusicPlayer.dll"))
+    PROCESS_PER_MONITOR_DPI_AWARE = 2
+    shcore = ctypes.windll.shcore
+    shcore.SetProcessDpiAwareness.argtypes = [ctypes.c_size_t]
+    shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
 else:
     raise OSError("Unsupported OS '%s'" % os.name)
 
