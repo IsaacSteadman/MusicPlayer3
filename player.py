@@ -292,19 +292,21 @@ def thread_function_runner():
 class PlayerApp(App):
     def __init__(self, surf: pygame.SurfaceType, playlists_obj: List[Playlist], size_code: int, settings_obj: dict, mixer_freq: int):
         super().__init__(surf)
+        self.ignore_music_end_event = 0
         self.mixer_freq = mixer_freq
         self.playlists = playlists_obj
         self.settings = settings_obj
         self.fx_cb = fmp.get_sdl_mixer_registered()
         self.num_fft_points = 2048
         self.size_code = size_code
-        fmp.fmp_init(self.num_fft_points, 44100.0);
+        fmp.fmp_init(self.num_fft_points, 44100.0)
         self.expected_bytes = fmp.get_expected_out_buf_size()
-        self.fft_out_buf = (ctypes.c_double * (self.expected_bytes // ctypes.sizeof(ctypes.c_double)))();
-        self.fft_counters = (ctypes.c_size_t * 3)();
+        self.fft_out_buf = (ctypes.c_double * (self.expected_bytes // ctypes.sizeof(ctypes.c_double)))()
+        self.fft_counters = (ctypes.c_size_t * 3)()
         self.thread = Thread(target=thread_function_runner,args=())
         self.thread.start()
-        self.visual_left = VisualizerControl2(64 if size_code != SIZE_LARGER else 256, 512 if size_code != SIZE_LARGER else 1024, 1, (self.num_fft_points >> 1) - 1, (320 - 256, 480 - 64), BLUE, GREEN)
+        # height=64 if size_code != SIZE_LARGER else 256
+        self.visual_left = VisualizerControl2(1536, 512 if size_code != SIZE_LARGER else 1024, 1, (self.num_fft_points >> 1) - 1, (320 - 256, 480 - 64), BLUE, GREEN)
         vol = settings_obj.get("volume", 128)
         if not isinstance(vol, int):
             print("WARN: expected settings.volume to be an integer")
@@ -494,7 +496,10 @@ class PlayerApp(App):
         self.prog_bar.set_pos_size(self, None, (width - 128, 4))
 
     def on_music_done(self, evt):
-        self.next_song()
+        if self.ignore_music_end_event > 0:
+            self.ignore_music_end_event -= 1
+        else:
+            self.next_song()
         return True
 
     def next_in_list_action(self, btn, pos):
@@ -613,6 +618,7 @@ class PlayerApp(App):
             self.mixer_freq = info.sample_rate
             music.set_endevent(prev_end_evt)
             music.set_volume(prev_volume)
+            self.ignore_music_end_event += 1
             print("Mixer reinitialized with sample_rate = %u" % info.sample_rate)
         self.total_time_lbl.set_lbl(self, "%u:%02u" % divmod(int(self.cur_song_duration), 60))
         try:
@@ -739,6 +745,7 @@ def mainloop():
 job = 1
 SIZE_NORMAL = 2
 SIZE_LARGER = 3
+SIZE_MAX_VIS = 4
 
 
 if __name__ == "__main__":
@@ -761,7 +768,8 @@ if __name__ == "__main__":
         try:
             size_code = {
                 "normal": SIZE_NORMAL,
-                "larger": SIZE_LARGER
+                "larger": SIZE_LARGER,
+                "max-visualizer": SIZE_MAX_VIS
             }[settings["size"]]
         except KeyError:
             size_code = SIZE_NORMAL
@@ -771,7 +779,7 @@ if __name__ == "__main__":
             width, height = 640 - 512 + 1024, 480 - 64 + 256
         else:
             raise ValueError("expected size_code to be one of [SIZE_NORMAL, SIZE_LARGER]")
-        surf = pygame.display.set_mode((width, height))
+        surf = pygame.display.set_mode((width, height), flags=pygame.RESIZABLE)
         pygame.mixer.init(frequency=44100)
         pygame.font.init()
         music.set_endevent(pygame.USEREVENT)
