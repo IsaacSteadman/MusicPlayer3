@@ -32,7 +32,7 @@ def find_sdl_mixer_name() -> str:
             GetModuleFileNameA(arr_inst[i], arr_inst1, ctypes.sizeof(arr_inst1))
             try:
                 y = arr_inst1.value.decode("utf8")
-                if "SDL_mixer" in y:
+                if "SDL_mixer" in y or "SDL2_mixer" in y:
                     if len(res):
                         if res[0] != y:
                             raise OSError("Too many SDL_mixer instances found: %s and %s" % (res[0], y))
